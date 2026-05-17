@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>英語学習用エディタ</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        #toolbar {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        button, input[type="text"] {
+            padding: 5px 10px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #fff;
+        }
+        button:hover {
+            background-color: #e0e0e0;
+            cursor: pointer;
+        }
+        #workspace {
+            display: flex;
+            border: 1px solid #aaa;
+            background-color: #fff;
+            height: 500px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        #line-numbers {
+            width: 50px;
+            background-color: #eee;
+            color: #888;
+            text-align: right;
+            padding: 10px 5px;
+            box-sizing: border-box;
+            overflow-y: hidden;
+            user-select: none;
+            font-family: monospace;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        #editor {
+            flex: 1;
+            padding: 10px;
+            box-sizing: border-box;
+            overflow-y: auto;
+            outline: none;
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        mark {
+            background-color: #ffeb3b;
+            color: #000;
+        }
+        #ai-container {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #007bff;
+            border-radius: 4px;
+            background-color: #f0f8ff;
+            display: none;
+        }
+        .ai-box {
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+        .ai-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #007bff;
+        }
+        #ai-error {
+            color: red;
+            font-weight: bold;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="toolbar">
+        <button id="btn-new">New</button>
+        <button id="btn-save">Save</button>
+        <input type="file" id="input-file" accept=".txt" style="display: none;">
+        <button id="btn-load">Load</button>
+        <button id="btn-undo">Undo</button>
+        <button id="btn-redo">Redo</button>
+        <input type="text" id="input-search" placeholder="検索文字列">
+        <button id="btn-search">Search</button>
+        <input type="text" id="input-replace" placeholder="置換文字列">
+        <button id="btn-replace">Replace</button>
+        <button id="btn-check" style="background-color: #007bff; color: white;">Check English</button>
+    </div>
+
+    <div id="workspace">
+        <div id="line-numbers">1</div>
+        <div id="editor" contenteditable="true" spellcheck="false"></div>
+    </div>
+
+    <div id="ai-container">
+        <div id="ai-error"></div>
+        <div class="ai-title">修正文</div>
+        <div id="ai-corrected" class="ai-box"></div>
+        <div class="ai-title">解説</div>
+        <div id="ai-explanation" class="ai-box"></div>
+    </div>
+
+    <script>
+        const editor = document.getElementById('editor');
+        const lineNumbers = document.getElementById('line-numbers');
+        const btnNew = document.getElementById('btn-new');
+        const btnSave = document.getElementById('btn-save');
+        const btnLoad = document.getElementById('btn-load');
+        const inputFile = document.getElementById('input-file');
+        const btnUndo = document.getElementById('btn-undo');
+        const btnRedo = document.getElementById('btn-redo');
+        const btnSearch = document.getElementById('btn-search');
+        const btnReplace = document.getElementById('btn-replace');
+        const inputSearch = document.getElementById('input-search');
+        const inputReplace = document.getElementById('input-replace');
+        const btnCheck = document.getElementById('btn-check');
+        const aiContainer = document.getElementById('ai-container');
+        const aiCorrected = document.getElementById('ai-corrected');
+        const aiExplanation = document.getElementById('ai-explanation');
+        const aiError = document.getElementById('ai-error');
+
+        let historyList = [];
+        let historyIndex = -1;
+        let isComposing = false;
+
+        function updateLineNumbers() {
+            const text = editor.innerText;
+            const lines = text.split('\n').length;
+            let numbersStr = '';
+            for (let i = 1; i <= lines; i++) {
+                numbersStr += i + '<br>';
+            }
+            lineNumbers.innerHTML = numbersStr;
+        }
+
+        function saveState() {
+            const currentText = editor.innerText;
+            if (historyIndex >= 0 && historyList[historyIndex] === currentText) return;
+            
+            historyList = historyList.slice(0, historyIndex + 1);
+            historyList.push(currentText);
+            
+            if (historyList.length > 50) {
+                historyList.shift();
+            } else {
+                historyIndex++;
+            }
+        }
+
+        function loadState(index) {
+            if (index < 0 || index >= historyList.length) return;
+            historyIndex = index;
+            editor.innerText = historyList[historyIndex];
+            updateLineNumbers();
+        }
+
+        editor.addEventListener('scroll', () => {
+            lineNumbers.scrollTop = editor.scrollTop;
+        });
+
+        editor.addEventListener('compositionstart', () => { isComposing = true; });
+        editor.addEventListener('compositionend', () => { 
+            isComposing = false; 
+            saveState();
+            updateLineNumbers();
+        });
+
+        editor.addEventListener('input', () => {
+            if (!isComposing) {
+                saveState();
+                updateLineNumbers();
+            }
+        });
+
+        editor.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+            const selection = window.getSelection();
+            if (!selection.rangeCount) return;
+            selection.deleteFromDocument();
+            selection.getRangeAt(0).insertNode(document.createTextNode(text));
+            selection.collapseToEnd();
+            saveState();
+            updateLineNumbers();
+        });
+
+        btnNew.addEventListener('click', () => {
+            editor.innerText = '';
+            saveState();
+            updateLineNumbers();
+            aiContainer.style.display = 'none';
+        });
+
+        btnSave.addEventListener('click', () => {
+            const text = editor.innerText;
+            const blob = new Blob([text], { type: 'text/plain' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'document.txt';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        });
+
+        btnLoad.addEventListener('click', () => {
+            inputFile.click();
+        });
+
+        inputFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                editor.innerText = event.target.result;
+                saveState();
+                updateLineNumbers();
+                inputFile.value = '';
+            };
+            reader.readAsText(file);
+        });
+
+        btnUndo.addEventListener('click', () => {
+            loadState(historyIndex - 1);
+        });
+
+        btnRedo.addEventListener('click', () => {
+            loadState(historyIndex + 1);
+        });
+
+        btnSearch.addEventListener('click', () => {
+            const keyword = inputSearch.value;
+            if (!keyword) return;
+            const text = editor.innerText;
+            const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(escapedKeyword, 'g');
+            const highlightedHtml = text.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(regex, '<mark>$&</mark>');
+            editor.innerHTML = highlightedHtml;
+        });
+
+        btnReplace.addEventListener('click', () => {
+            const keyword = inputSearch.value;
+            const replacement = inputReplace.value;
+            if (!keyword) return;
+            const text = editor.innerText;
+            const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(escapedKeyword, 'g');
+            editor.innerText = text.replace(regex, replacement);
+            saveState();
+            updateLineNumbers();
+        });
+
+        btnCheck.addEventListener('click', async () => {
+            const text = editor.innerText;
+            if (!text.trim()) return;
+
+            aiContainer.style.display = 'block';
+            aiError.style.display = 'none';
+            aiCorrected.innerText = '通信中...';
+            aiExplanation.innerText = '通信中...';
+
+            try {
+                const response = await fetch('/api/correct', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+
+                if (!response.ok) {
+                    throw new Error('通信エラーが発生しました');
+                }
+
+                const data = await response.json();
+                const content = data.choices[0].message.content;
+
+                const matchCorrected = content.match(/Corrected:\s*(.*)/);
+                const matchExplanation = content.match(/Explanation:\s*([\s\S]*)/);
+
+                if (matchCorrected && matchExplanation) {
+                    aiCorrected.innerText = matchCorrected[1].trim();
+                    aiExplanation.innerText = matchExplanation[1].trim();
+                } else {
+                    throw new Error('APIの応答フォーマットが不正です');
+                }
+            } catch (error) {
+                aiCorrected.innerText = '';
+                aiExplanation.innerText = '';
+                aiError.innerText = error.message;
+                aiError.style.display = 'block';
+            }
+        });
+
+        saveState();
+        updateLineNumbers();
+    </script>
+
+    <!--
+    【Vercelでこちらがするべきこと】
+    １．プロジェクト作成：このHTMLファイルを「index.html」としてリポジトリに配置し、Vercelと連携してデプロイします。
+    ２．APIエンドポイントの作成：プロジェクトのルートに「api」フォルダを作成し、「correct.js」（または.ts）を作成します。これが「/api/correct」として機能します。
+    ３．サーバーレス関数の実装：「api/correct.js」内で、POSTリクエストのbodyから「text」を受け取り、NVIDIA Nemotron APIのOpenAI互換エンドポイントへフェッチする処理を記述します。
+    ４．プロンプトの付与：サーバー側の処理で、systemメッセージ（You are a professional English teacher... 等の指定内容）と、userメッセージ（受け取ったtext）を組み立ててNVIDIA APIに送信します。
+    ５．環境変数の設定：NVIDIAのAPIキーはVercelのダッシュボード（Settings > Environment Variables）で設定し、サーバー側のコード（process.env）でのみ参照するようにします。
+    ６．レスポンス返却：NVIDIA APIから受け取ったOpenAI互換のJSONレスポンスを、そのままフロントエンドへ返却します。
+    -->
+</body>
+</html>
