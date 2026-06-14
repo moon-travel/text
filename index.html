@@ -313,14 +313,5 @@
         updateLineNumbers();
     </script>
 
-    <!--
-    【Vercelでこちらがするべきこと】
-    １．プロジェクト作成：このHTMLファイルを「index.html」としてリポジトリに配置し、Vercelと連携してデプロイします。
-    ２．APIエンドポイントの作成：プロジェクトのルートに「api」フォルダを作成し、「correct.js」（または.ts）を作成します。これが「/api/correct」として機能します。
-    ３．サーバーレス関数の実装：「api/correct.js」内で、POSTリクエストのbodyから「text」を受け取り、NVIDIA Nemotron APIのOpenAI互換エンドポイントへフェッチする処理を記述します。
-    ４．プロンプトの付与：サーバー側の処理で、systemメッセージ（You are a professional English teacher... 等の指定内容）と、userメッセージ（受け取ったtext）を組み立ててNVIDIA APIに送信します。
-    ５．環境変数の設定：NVIDIAのAPIキーはVercelのダッシュボード（Settings > Environment Variables）で設定し、サーバー側のコード（process.env）でのみ参照するようにします。
-    ６．レスポンス返却：NVIDIA APIから受け取ったOpenAI互換のJSONレスポンスを、そのままフロントエンドへ返却します。
-    -->
 </body>
 </html>
